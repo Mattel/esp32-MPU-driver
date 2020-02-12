@@ -409,8 +409,12 @@ typedef enum {
 /*! FIFO configuration, enable sensors to be written to FIFO */
 typedef uint16_t fifo_config_t;
 static constexpr fifo_config_t FIFO_CFG_NONE = (0x0);
+#if CONFIG_ICM_SUPPORT
+static constexpr fifo_config_t FIFO_CFG_GYRO = 1 << regs::FIFO_ZGYRO_EN_BIT;
+#else
 static constexpr fifo_config_t FIFO_CFG_GYRO =
     (1 << regs::FIFO_XGYRO_EN_BIT | 1 << regs::FIFO_YGYRO_EN_BIT | 1 << regs::FIFO_ZGYRO_EN_BIT);
+#endif
 static constexpr fifo_config_t FIFO_CFG_ACCEL       = (1 << regs::FIFO_ACCEL_EN_BIT);
 static constexpr fifo_config_t FIFO_CFG_TEMPERATURE = (1 << regs::FIFO_TEMP_EN_BIT);
 static constexpr fifo_config_t FIFO_CFG_SLAVE0      = (1 << regs::FIFO_SLV_0_EN_BIT);

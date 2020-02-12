@@ -141,7 +141,9 @@ esp_err_t MPU::testConnection()
 {
     const uint8_t wai = whoAmI();
     if (MPU_ERR_CHECK(lastError())) return err;
-#if defined CONFIG_MPU6000 || defined CONFIG_MPU6050 || defined CONFIG_MPU9150
+#if defined CONFIG_ICM_SUPPORT
+    return (wai == 0x12) ? ESP_OK : ESP_ERR_NOT_FOUND;
+#elif defined CONFIG_MPU6000 || defined CONFIG_MPU6050 || defined CONFIG_MPU9150
     return (wai == 0x68) ? ESP_OK : ESP_ERR_NOT_FOUND;
 #elif defined CONFIG_MPU9255
     return (wai == 0x73) ? ESP_OK : ESP_ERR_NOT_FOUND;
@@ -1195,7 +1197,11 @@ fifo_mode_t MPU::getFIFOMode()
 esp_err_t MPU::setFIFOConfig(fifo_config_t config)
 {
     if (MPU_ERR_CHECK(writeByte(regs::FIFO_EN, (uint8_t) config))) return err;
-    return MPU_ERR_CHECK(writeBit(regs::I2C_MST_CTRL, regs::I2CMST_CTRL_SLV_3_FIFO_EN_BIT, config >> 8));
+#ifdef CONFIG_ICM_SUPPORT
+        return ESP_OK;
+#else
+        return MPU_ERR_CHECK(writeBit(regs::I2C_MST_CTRL, regs::I2CMST_CTRL_SLV_3_FIFO_EN_BIT, config >> 8));
+#endif
 }
 
 /**
@@ -2345,7 +2351,11 @@ esp_err_t MPU::getBiases(accel_fs_t accelFS, gyro_fs_t gyroFS, raw_axes_t* accel
     constexpr uint16_t kSampleRate      = 1000;
     constexpr dlpf_t kDLPF              = DLPF_188HZ;
     constexpr fifo_config_t kFIFOConfig = FIFO_CFG_ACCEL | FIFO_CFG_GYRO;
+#ifdef CONFIG_ICM_SUPPORT
+    constexpr size_t kPacketSize        = 14;
+#else
     constexpr size_t kPacketSize        = 12;
+#endif
     // backup previous configuration
     const uint16_t prevSampleRate      = getSampleRate();
     const dlpf_t prevDLPF              = getDigitalLowPassFilter();
@@ -2373,7 +2383,9 @@ esp_err_t MPU::getBiases(accel_fs_t accelFS, gyro_fs_t gyroFS, raw_axes_t* accel
     // fill FIFO for 100ms
     if (MPU_ERR_CHECK(resetFIFO())) return err;
     vTaskDelay(100 / portTICK_PERIOD_MS);
+#ifndef CONFIG_ICM_SUPPORT // Disabling FIFO on ICM automatically empties FIFO -- prevent that from happening.
     if (MPU_ERR_CHECK(setFIFOConfig(FIFO_CFG_NONE))) return err;
+#endif
     // get FIFO count
     const uint16_t fifoCount = getFIFOCount();
     if (MPU_ERR_CHECK(lastError())) return err;
@@ -2387,15 +2399,20 @@ esp_err_t MPU::getBiases(accel_fs_t accelFS, gyro_fs_t gyroFS, raw_axes_t* accel
     // fetch data and add up
     axes_t<int> accelAvg, gyroAvg;
     for (int i = 0; i < packetCount; i++) {
+        int buf_bit = 0;
         if (MPU_ERR_CHECK(readFIFO(kPacketSize, buffer))) return err;
         // retrieve data
         raw_axes_t accelCur, gyroCur;
-        accelCur.x = (buffer[0] << 8) | buffer[1];
-        accelCur.y = (buffer[2] << 8) | buffer[3];
-        accelCur.z = (buffer[4] << 8) | buffer[5];
-        gyroCur.x  = (buffer[6] << 8) | buffer[7];
-        gyroCur.y  = (buffer[8] << 8) | buffer[9];
-        gyroCur.z  = (buffer[10] << 8) | buffer[11];
+        accelCur.x = (buffer[buf_bit] << 8) | buffer[buf_bit+1]; buf_bit+=2;
+        accelCur.y = (buffer[buf_bit] << 8) | buffer[buf_bit+1]; buf_bit+=2;
+        accelCur.z = (buffer[buf_bit] << 8) | buffer[buf_bit+1]; buf_bit+=2;
+#ifdef CONFIG_ICM_SUPPORT
+        // Skip temperature bits
+        buf_bit += 2;
+#endif
+        gyroCur.x  = (buffer[buf_bit] << 8) | buffer[buf_bit+1]; buf_bit+=2;
+        gyroCur.y  = (buffer[buf_bit] << 8) | buffer[buf_bit+1]; buf_bit+=2;
+        gyroCur.z  = (buffer[buf_bit] << 8) | buffer[buf_bit+1];
         // add up
         accelAvg.x += accelCur.x;
         accelAvg.y += accelCur.y;
