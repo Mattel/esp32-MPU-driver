@@ -176,7 +176,7 @@ config MPU_LOG_ERROR_TRACES
 
 config ICM_SUPPORT
     bool "ICM-20602 Support"
-    default "y"
+    default "n"
     help
         Replaces some MPU6050 functionality for use with ICM-20602.
 

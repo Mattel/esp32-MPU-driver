@@ -174,5 +174,10 @@ config MPU_LOG_ERROR_TRACES
         Display on console communication error traces that occur within MPU driver code.
         Mostly for debugging.
 
+config ICM_SUPPORT
+    bool "ICM-20602 Support"
+    default "n"
+    help
+        Replaces some MPU6050 functionality for use with ICM-20602.
 
 endmenu
